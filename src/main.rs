@@ -44,7 +44,7 @@ fn create_btree_index<R>(mut rdr: Reader<R>, btree: &mut BTreeMap<u64, u64>) -> 
 }
 
 fn usage() {
-    println!("Usage: cvslookup <csv-file> <lookup-id>");
+    println!("Usage: serve_csv <csv-file>");
     std::process::exit(-1);
 }
 
