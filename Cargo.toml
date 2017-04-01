@@ -1,6 +1,6 @@
 [package]
 authors = ["Carl Johan Gustavsson <carl.johan@tictail.com>"]
-name = "csvlookup"
+name = "serve_csv"
 version = "0.1.0"
 
 [dependencies]
