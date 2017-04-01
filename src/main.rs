@@ -118,7 +118,7 @@ struct LookupResponse {
 
 #[derive(Serialize)]
 struct Recommendation {
-    product_id: u64,
+    item_id: u64,
     score: f64
 }
 
@@ -140,11 +140,11 @@ fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
             }
             let parts: Vec<&str> = col.split(":").collect();
 
-            let product_id = parts[0].parse::<u64>().unwrap();
+            let item_id = parts[0].parse::<u64>().unwrap();
             let score = parts[1].parse::<f64>().unwrap();
 
             recs.push(Recommendation{
-                product_id: product_id,
+                item_id: item_id,
                 score: score
             })
         }
