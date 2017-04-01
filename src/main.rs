@@ -6,15 +6,13 @@ extern crate byteorder;
 extern crate time;
 extern crate rocket;
 extern crate serde_json;
-#[macro_use] extern crate rocket_contrib;
+extern crate rocket_contrib;
 #[macro_use] extern crate serde_derive;
 
-use byteorder::{WriteBytesExt, BigEndian};
-
 use std::io::{self, Write};
-use csv::index::{Indexed};
+use csv::index::{Indexed, create_index};
 
-use csv::{Reader, NextField, Result};
+use csv::{Reader, Result};
 
 use std::collections::BTreeMap;
 
@@ -23,26 +21,6 @@ use rocket::{Rocket, State};
 use rocket_contrib::JSON;
 
 type IndexCon = Mutex<CsvIndex>;
-
-fn create_index<R, W>(mut rdr: Reader<R>, mut wtr: W) -> Result<()>
-        where R: io::Read + io::Seek, W: io::Write {
-    // Seek to the beginning so that we get everything.
-    try!(rdr.seek(0));
-    let mut count = 0u64;
-    while !rdr.done() {
-        // wtr.insert()
-        try!(wtr.write_u64::<BigEndian>(rdr.byte_offset()));
-        loop {
-            match rdr.next_bytes() {
-                NextField::EndOfCsv => break,
-                NextField::EndOfRecord => { count += 1; break; },
-                NextField::Error(err) => return Err(err),
-                NextField::Data(_) => {}
-            }
-        }
-    }
-    wtr.write_u64::<BigEndian>(count).map_err(From::from)
-}
 
 fn create_btree_index<R>(mut rdr: Reader<R>, btree: &mut BTreeMap<u64, u64>) -> Result<()>
          where R: io::Read + io::Seek {
@@ -116,17 +94,14 @@ impl CsvIndex {
             println!("Btree lookup time: {:?} us", (post_btree_lookup-pre_btree_lookup)/1000);
 
             let pre_lookup = time::precise_time_ns();
-            // Seek to the second record and read its data. This is done *without*
-            // reading the first record.
+
             self.offset.seek(*row_index).unwrap();
 
-            // Read the first row at this position (which is the second record).
-            // Since `Indexed` derefs to a `csv::Reader`, we can call CSV reader methods
-            // on it directly.
             let row = self.offset.records().next().unwrap().unwrap();
             let post_lookup = time::precise_time_ns();
 
             println!("Lookup time: {:?} us", (post_lookup-pre_lookup)/1000);
+
             Some(row)
         }
         else {
@@ -196,7 +171,7 @@ fn rocket(csv_file: &str) -> Rocket {
     let id_to_row_index = build_btree_index(csv_file);
     let offset_index = build_offset_index(csv_file);
 
-    let mut index = CsvIndex{id_to_row: id_to_row_index, offset: offset_index};
+    let index = CsvIndex{id_to_row: id_to_row_index, offset: offset_index};
 
     rocket::ignite()
         .manage(Mutex::new(index))
