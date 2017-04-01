@@ -89,6 +89,41 @@ fn build_offset_index(csv_file: &str) -> Indexed<std::fs::File, io::Cursor<Vec<u
     index
 }
 
+struct CsvIndex {
+    id_to_row: BTreeMap<u64, u64>,
+    offset: Indexed<std::fs::File, io::Cursor<Vec<u8>>>
+}
+
+impl CsvIndex {
+    fn lookup(&mut self, id: u64) -> Option<Vec<String>> {
+        let pre_btree_lookup = time::precise_time_ns();
+        let row_index_result = self.id_to_row.get(&id);
+        let post_btree_lookup = time::precise_time_ns();
+
+        if let Some(row_index) = row_index_result {
+            println!("Row index: {:?}", *row_index);
+            println!("Btree lookup time: {:?} ns", post_btree_lookup-pre_btree_lookup);
+
+            let pre_lookup = time::precise_time_ns();
+            // Seek to the second record and read its data. This is done *without*
+            // reading the first record.
+            self.offset.seek(*row_index).unwrap();
+
+            // Read the first row at this position (which is the second record).
+            // Since `Indexed` derefs to a `csv::Reader`, we can call CSV reader methods
+            // on it directly.
+            let row = self.offset.records().next().unwrap().unwrap();
+            let post_lookup = time::precise_time_ns();
+
+            println!("Lookup time: {:?} us", (post_lookup-pre_lookup)/1000);
+            Some(row)
+        }
+        else {
+            return None;
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -99,36 +134,12 @@ fn main() {
     let csv_file = &args[1];
 
     let id_to_row_index = build_btree_index(&csv_file);
-    let mut offset_index = build_offset_index(&csv_file);
+    let offset_index = build_offset_index(&csv_file);
 
-    let to_find = &args[2].parse::<u64>().expect("Lookup id must be an integer");
+    let mut index = CsvIndex{id_to_row: id_to_row_index, offset: offset_index};
 
-    let pre_btree_lookup = time::precise_time_ns();
-    let row_index_result = id_to_row_index.get(&to_find);
-    let post_btree_lookup = time::precise_time_ns();
+    let id_to_find = &args[2].parse::<u64>().expect("Lookup id must be an integer");
 
-    if let Some(row_index) = row_index_result {
-        println!("Row index: {:?}", *row_index);
-        println!("Btree lookup time: {:?} ns", post_btree_lookup-pre_btree_lookup);
-
-        let pre_lookup = time::precise_time_ns();
-        // Seek to the second record and read its data. This is done *without*
-        // reading the first record.
-        offset_index.seek(*row_index).unwrap();
-
-        // Read the first row at this position (which is the second record).
-        // Since `Indexed` derefs to a `csv::Reader`, we can call CSV reader methods
-        // on it directly.
-        let row = offset_index.records().next().unwrap().unwrap();
-        let post_lookup = time::precise_time_ns();
-
-        println!("Row: {:?}", row);
-
-        println!("Lookup time: {:?} us", (post_lookup-pre_lookup)/1000);
-    }
-    else {
-        println!("Key not found");
-        return;
-    }
-
+    let row = index.lookup(*id_to_find);
+    println!("Row: {:?}", row);
 }
