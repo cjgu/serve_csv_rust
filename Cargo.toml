@@ -1,0 +1,9 @@
+[package]
+authors = ["Carl Johan Gustavsson <carl.johan@tictail.com>"]
+name = "csvlookup"
+version = "0.1.0"
+
+[dependencies]
+byteorder = "1.0.0"
+csv = "0.15.0"
+time = "0.1.36"
