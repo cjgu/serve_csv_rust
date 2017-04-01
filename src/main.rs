@@ -128,7 +128,7 @@ fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
         let mut recs = Vec::new();
         let mut idx = 0;
         for col in content {
-            if idx < 2 {
+            if idx < 1 {
                 idx += 1;
                 continue;
             }
