@@ -28,13 +28,7 @@ fn create_btree_index<R>(mut rdr: Reader<R>, btree: &mut BTreeMap<u64, u64>) -> 
     try!(rdr.seek(0));
 
     let mut count = 0u64;
-    let mut skip = true;
     for record in rdr.decode() {
-        if skip {
-            // Skip header
-            skip = false;
-            continue;
-        }
         let (id_str, _): (String, String) = record.unwrap();
         let id = id_str.parse::<u64>().expect("Non-integer in first column");
         btree.insert(id, count);
@@ -51,7 +45,7 @@ fn usage() {
 fn build_btree_index(csv_file: &str) -> BTreeMap<u64, u64> {
     let pre_btree = time::precise_time_ns();
 
-    let rdr = csv::Reader::from_file(csv_file).expect("Cant read file");
+    let rdr = csv::Reader::from_file(csv_file).expect("Cant read file").has_headers(false);
 
     let mut id_to_row_index: BTreeMap<u64, u64> = BTreeMap::new();
     create_btree_index(rdr, &mut id_to_row_index).unwrap();
@@ -65,7 +59,7 @@ fn build_btree_index(csv_file: &str) -> BTreeMap<u64, u64> {
 fn build_offset_index(csv_file: &str) -> Indexed<std::fs::File, io::Cursor<Vec<u8>>>  {
     let pre_index = time::precise_time_ns();
 
-    let rdr = || csv::Reader::from_file(csv_file).expect("Cant read file");
+    let rdr = || csv::Reader::from_file(csv_file).expect("Cant read file").has_headers(false);
     let mut offset_index_data = io::Cursor::new(Vec::new());
 
     create_index(rdr(), offset_index_data.by_ref()).unwrap();
