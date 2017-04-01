@@ -1,7 +1,13 @@
+#![feature(plugin)]
+#![plugin(rocket_codegen)]
+
 extern crate csv;
 extern crate byteorder;
 extern crate time;
-
+extern crate rocket;
+extern crate serde_json;
+#[macro_use] extern crate rocket_contrib;
+#[macro_use] extern crate serde_derive;
 
 use byteorder::{WriteBytesExt, BigEndian};
 
@@ -11,6 +17,12 @@ use csv::index::{Indexed};
 use csv::{Reader, NextField, Result};
 
 use std::collections::BTreeMap;
+
+use std::sync::Mutex;
+use rocket::{Rocket, State};
+use rocket_contrib::JSON;
+
+type IndexCon = Mutex<CsvIndex>;
 
 fn create_index<R, W>(mut rdr: Reader<R>, mut wtr: W) -> Result<()>
         where R: io::Read + io::Seek, W: io::Write {
@@ -63,12 +75,11 @@ fn build_btree_index(csv_file: &str) -> BTreeMap<u64, u64> {
 
     let rdr = csv::Reader::from_file(csv_file).expect("Cant read file");
 
-
     let mut id_to_row_index: BTreeMap<u64, u64> = BTreeMap::new();
     create_btree_index(rdr, &mut id_to_row_index).unwrap();
 
     let post_btree = time::precise_time_ns();
-    println!("Btree time: {:?} us", (post_btree-pre_btree)/1000);
+    println!("Btree time: {:?} ms", (post_btree-pre_btree)/1000_000);
 
     id_to_row_index
 }
@@ -84,7 +95,7 @@ fn build_offset_index(csv_file: &str) -> Indexed<std::fs::File, io::Cursor<Vec<u
     let index = Indexed::open(rdr(), offset_index_data).unwrap();
 
     let post_index = time::precise_time_ns();
-    println!("Offset index time: {:?} us", (post_index-pre_index)/1000);
+    println!("Offset index time: {:?} ms", (post_index-pre_index)/1000_000);
 
     index
 }
@@ -102,7 +113,7 @@ impl CsvIndex {
 
         if let Some(row_index) = row_index_result {
             println!("Row index: {:?}", *row_index);
-            println!("Btree lookup time: {:?} ns", post_btree_lookup-pre_btree_lookup);
+            println!("Btree lookup time: {:?} us", (post_btree_lookup-pre_btree_lookup)/1000);
 
             let pre_lookup = time::precise_time_ns();
             // Seek to the second record and read its data. This is done *without*
@@ -124,22 +135,82 @@ impl CsvIndex {
     }
 }
 
+#[derive(Serialize)]
+struct LookupResponse {
+    status: u64,
+    recommendations: Vec<Recommendation>
+}
+
+#[derive(Serialize)]
+struct Recommendation {
+    product_id: u64,
+    score: f64
+}
+
+#[get("/<id>")]
+fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
+    let row = index_con.lock()
+        .expect("index connection lock")
+        .lookup(id);
+
+    let pre = time::precise_time_ns();
+
+    if let Some(content) = row {
+        let mut recs = Vec::new();
+        let mut idx = 0;
+        for col in content {
+            if idx < 2 {
+                idx += 1;
+                continue;
+            }
+            let parts: Vec<&str> = col.split(":").collect();
+
+            let product_id = parts[0].parse::<u64>().unwrap();
+            let score = parts[1].parse::<f64>().unwrap();
+
+            recs.push(Recommendation{
+                product_id: product_id,
+                score: score
+            })
+        }
+
+        let post = time::precise_time_ns();
+        println!("Post processing: {:?} us", (post-pre)/1000);
+        JSON(LookupResponse {
+            recommendations: recs,
+            status: 200 
+        })
+    }
+    else {
+        let post = time::precise_time_ns();
+        println!("Post processing: {:?} us", (post-pre)/1000);
+        JSON(LookupResponse {
+            recommendations: vec![],
+            status: 404
+        })
+    }
+
+}
+
+fn rocket(csv_file: &str) -> Rocket {
+    let id_to_row_index = build_btree_index(csv_file);
+    let offset_index = build_offset_index(csv_file);
+
+    let mut index = CsvIndex{id_to_row: id_to_row_index, offset: offset_index};
+
+    rocket::ignite()
+        .manage(Mutex::new(index))
+        .mount("/", routes![lookup])
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() != 3 {
+    if args.len() != 2 {
         usage();
     }
 
     let csv_file = &args[1];
 
-    let id_to_row_index = build_btree_index(&csv_file);
-    let offset_index = build_offset_index(&csv_file);
-
-    let mut index = CsvIndex{id_to_row: id_to_row_index, offset: offset_index};
-
-    let id_to_find = &args[2].parse::<u64>().expect("Lookup id must be an integer");
-
-    let row = index.lookup(*id_to_find);
-    println!("Row: {:?}", row);
+    rocket(&csv_file).launch();
 }
