@@ -8,6 +8,8 @@ It works by indexing the first column (a integer item_id) then serves up a HTTP 
 
 # Usage
 
+This project requires Rust Nightly due to usage of Rocket.
+
 Given a csv
 
 ```csv
