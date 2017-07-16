@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 
 use std::sync::Mutex;
 use rocket::{Rocket, State};
-use rocket_contrib::JSON;
+use rocket_contrib::Json;
 
 type IndexCon = Mutex<CsvIndex>;
 
@@ -117,7 +117,7 @@ struct Recommendation {
 }
 
 #[get("/<id>")]
-fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
+fn lookup(id: u64, index_con: State<IndexCon>) -> Json<LookupResponse>  {
     let row = index_con.lock()
         .expect("index connection lock")
         .lookup(id);
@@ -145,7 +145,7 @@ fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
 
         let post = time::precise_time_ns();
         println!("Post processing: {:?} us", (post-pre)/1000);
-        JSON(LookupResponse {
+        Json(LookupResponse {
             recommendations: recs,
             status: 200 
         })
@@ -153,7 +153,7 @@ fn lookup(id: u64, index_con: State<IndexCon>) -> JSON<LookupResponse>  {
     else {
         let post = time::precise_time_ns();
         println!("Post processing: {:?} us", (post-pre)/1000);
-        JSON(LookupResponse {
+        Json(LookupResponse {
             recommendations: vec![],
             status: 404
         })
